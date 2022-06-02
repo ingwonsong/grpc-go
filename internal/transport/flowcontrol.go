@@ -52,9 +52,14 @@ func newWriteQuota(sz int32, done <-chan struct{}) *writeQuota {
 
 func (w *writeQuota) get(sz int32) error {
 	for {
-		if atomic.LoadInt32(&w.quota) > 0 {
-			atomic.AddInt32(&w.quota, -sz)
-			return nil
+		curVal := atomic.LoadInt32(&w.quota)
+		if curVal > 0 {
+			if atomic.CompareAndSwapInt32(&w.quota, curVal, curVal-sz) {
+				return nil
+			} else {
+				// Not wait done or ch. This is a kind of spinlock.
+				continue
+			}
 		}
 		select {
 		case <-w.ch:
